@@ -41,7 +41,7 @@ fn match_identifier(word: &str, id_map: &mut HashMap<String, u32>) -> (bool, u32
     (true, id_map[word])
 }
 
-fn lex(input: &str) -> Vec<Token> {
+fn lex(input: &str) -> (Vec<Token>, usize) {
     let mut tokens = Vec::new();
 
     let mut id_map = HashMap::<String, u32>::new();
@@ -76,7 +76,7 @@ fn lex(input: &str) -> Vec<Token> {
         }
     }
 
-    tokens
+    (tokens, id_map.len())
 }
 
 fn swallow_tokens(tokens: &mut Vec<Token>, token: &[Token]) -> (bool, Vec<Token>) {
@@ -111,6 +111,7 @@ enum Expr {
     Assignment(u32, Box<Expr>),
     Integer(u8),
     Identifier(u32),
+    Put(Box<Expr>),
     Failed,
 }
 
@@ -149,21 +150,90 @@ fn parse_expr(tokens: &mut Vec<Token>) -> (bool, Expr) {
             _ => unreachable!(),
         };
         return (true, Expr::Integer(v));
+    } else if let (true, toks) = swallow_tokens(tokens, &[Token::Put]) {
+        if let (true, expr) = parse_expr(tokens) {
+            return (true, Expr::Put(Box::new(expr)));
+        }
     }
 
     (false, Expr::Failed)
 }
 
+fn compile_statement(statement: &Statement, var_count: usize) -> String {
+    let mut out = String::new();
+
+    match statement {
+        Statement::Expr(e) => {
+            out += &compile_expr(e, var_count);
+        },
+        Statement::Failed => {},
+    };
+
+    out
+}
+
+fn compile_expr(expr: &Expr, var_count: usize) -> String {
+    let mut out = String::new();
+    match expr {
+        Expr::Assignment(i, v) => {
+            out += &">".repeat(*i as usize);
+            out += "[-]";
+            match **v {
+                Expr::Integer(x) => {
+                    out += &"+".repeat(x as usize);
+                },
+
+                _ => todo!(),
+            }
+            out += &"<".repeat(*i as usize);
+        },
+        Expr::Put(v) => {
+            match **v {
+                Expr::Integer(x) => {
+                    out += &">".repeat(var_count);
+                    out += &"+".repeat(x as usize);
+                    out += ".";
+                    out += "[-]";
+                    out += &"<".repeat(var_count);
+                },
+                Expr::Identifier(i) => {
+                    out += &">".repeat(i as usize);
+                    out += ".";
+                    out += &"<".repeat(i as usize);
+                }
+                _ => todo!(),
+            }
+        }
+        Expr::Integer(_) => {},
+        Expr::Failed => {},
+        _ => todo!(),
+    }
+    out
+}
+
+fn compile_prgram(tokens: &mut Vec<Token>, var_count: usize) -> String {
+    let mut out = String::new();
+    let mut statements = Vec::new();
+    while let (true, s) = parse_statement(tokens) {
+        println!("{s:#?}");
+        statements.push(s);
+    }
+
+    for statement in statements {
+        out += &compile_statement(&statement, var_count);
+    }
+
+    out
+}
+
 fn main() {
     let input = std::fs::read_to_string("main.galaxy").unwrap();
 
-    let mut tokens = lex(&input).clone();
+    let (mut tokens, var_count) = lex(&input).clone();
 
     for token in &tokens {
         println!("{token:#?}");
     }
 
-    let (p, s) = parse_statement(&mut tokens);
-
-    println!("{s:#?}");
+    println!("{}", compile_prgram(&mut tokens, var_count));
 }
