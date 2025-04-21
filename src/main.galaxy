@@ -1,8 +1,12 @@
-x = 5;
-y = 51;
+x = 3;
+z = 51;
 
 while x {
-    put y;
+    y = 3;
+    while y {
+        put z;
+        dec y;
+    }
+    dec z;
     dec x;
-    dec y;
 }
