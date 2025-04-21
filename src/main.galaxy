@@ -1,4 +1,8 @@
-x = 65;
-y = x;
-z = y;
-put y;
+x = 5;
+y = 51;
+
+while x {
+    put y;
+    dec x;
+    dec y;
+}

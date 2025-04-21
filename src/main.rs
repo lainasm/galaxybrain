@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, os::linux::raw::stat};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Token {
@@ -7,6 +7,10 @@ enum Token {
     Identifier(u32),
     Assign,
     Semicolon,
+    While,
+    LeftBraces,
+    RightBraces,
+    Dec,
     None,
 }
 
@@ -54,7 +58,7 @@ fn lex(input: &str) -> (Vec<Token>, usize) {
         let sub_words = word.split(';').collect::<Vec<_>>();
 
         for (i, &sub_word) in sub_words.iter().enumerate() {
-            println!("{sub_word}");
+            //println!("{sub_word}");
             if i > 0 {
                 tokens.push(Token::Semicolon);
             }
@@ -64,6 +68,10 @@ fn lex(input: &str) -> (Vec<Token>, usize) {
             }
             if match_put(sub_word) {
                 tokens.push(Token::Put);
+            } else if sub_word == "while" {
+                tokens.push(Token::While);
+            } else if sub_word == "dec" {
+                tokens.push(Token::Dec);
             } else if let (true, v) = match_integer(sub_word) {
                 tokens.push(Token::Integer(v));
             } else if let (true, v) = match_identifier(sub_word, &mut id_map) {
@@ -72,6 +80,10 @@ fn lex(input: &str) -> (Vec<Token>, usize) {
                 tokens.push(Token::Assign);
             } else if sub_word == ";" {
                 tokens.push(Token::Semicolon);
+            } else if sub_word == "{" {
+                tokens.push(Token::LeftBraces);
+            } else if sub_word == "}" {
+                tokens.push(Token::RightBraces);
             }
         }
     }
@@ -101,8 +113,16 @@ fn swallow_tokens(tokens: &mut Vec<Token>, token: &[Token]) -> (bool, Vec<Token>
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+enum Block {
+    Statements(u32, Vec<Statement>),
+    Failed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum Statement {
     Expr(Expr),
+    While(u32, Box<Vec<Statement>>),
+    Dec(u32),
     Failed,
 }
 
@@ -116,7 +136,27 @@ enum Expr {
 }
 
 fn parse_statement(tokens: &mut Vec<Token>) -> (bool, Statement) {
-    if let (true, expr) = parse_expr(tokens) {
+    if let (true, b) = parse_block(tokens) {
+        match b {
+            Block::Statements(id, s) => {
+                return (true, Statement::While(id, Box::new(s)));
+            }
+            Block::Failed => {},
+        }
+    }
+    else if let (true, toks) = swallow_tokens(tokens, &[Token::Dec, Token::Identifier(0)]) {
+        if let (true, _) = swallow_tokens(tokens, &[Token::Semicolon]) {
+            let id = match toks[1] {
+                Token::Identifier(x) => x,
+                _ => unreachable!(),
+            };
+
+            return (true, Statement::Dec(id));
+        } else {
+            println!("expected semicolon");
+            return (false, Statement::Failed);
+        }
+    } else if let (true, expr) = parse_expr(tokens) {
         if let (true, _) = swallow_tokens(tokens, &[Token::Semicolon]) {
             return (true, Statement::Expr(expr));
         }
@@ -127,6 +167,28 @@ fn parse_statement(tokens: &mut Vec<Token>) -> (bool, Statement) {
     }
 
     (false, Statement::Failed)
+}
+
+fn parse_block(tokens: &mut Vec<Token>) -> (bool, Block) {
+    if let (true, toks) = swallow_tokens(tokens, &[Token::While, Token::Identifier(0)]) {
+        if let (true, _toks2) = swallow_tokens(tokens, &[Token::LeftBraces]) {
+            let id = match toks[1] {
+                Token::Identifier(x) => x,
+                _ => unreachable!(),
+            };
+
+            let mut statements = Vec::<Statement>::new();
+
+            while let (false, _) = swallow_tokens(tokens, &[Token::RightBraces]) {
+                let (p, s) = parse_statement(tokens);
+                statements.push(s);
+            }
+
+            return (true, Block::Statements(id, statements));
+        }
+    }
+
+    (false, Block::Failed)
 }
 
 fn parse_expr(tokens: &mut Vec<Token>) -> (bool, Expr) {
@@ -166,6 +228,22 @@ fn compile_statement(statement: &Statement, var_count: usize) -> String {
         Statement::Expr(e) => {
             out += &compile_expr(e, var_count);
         },
+        Statement::While(i, b) => {
+            out += &">".repeat(*i as usize);
+            out += "[";
+            out += &"<".repeat(*i as usize);
+            for s in *b.clone() {
+                out += &compile_statement(&s, var_count);
+            }
+            out += &">".repeat(*i as usize);
+            out += "]";
+            out += &"<".repeat(*i as usize);
+        },
+        Statement::Dec(i) => {
+            out += &">".repeat(*i as usize);
+            out += "-";
+            out += &"<".repeat(*i as usize);
+        }
         Statement::Failed => {},
     };
 
@@ -260,6 +338,7 @@ fn compile_program(tokens: &mut Vec<Token>, var_count: usize) -> String {
 
 fn main() {
     let input = std::fs::read_to_string("main.galaxy").unwrap();
+    println!("{input}");
 
     let (mut tokens, var_count) = lex(&input).clone();
 
