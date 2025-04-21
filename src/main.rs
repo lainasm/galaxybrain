@@ -183,6 +183,38 @@ fn compile_expr(expr: &Expr, var_count: usize) -> String {
                     out += &"+".repeat(x as usize);
                 },
 
+                Expr::Identifier(i2) => {
+                    let (forward, backward) = if i2 > *i {
+                        ('>', '<')
+                    } else {
+                        ('<', '>')
+                    };
+
+                    let delta = (i2 as i32 - *i as i32).abs() as usize;
+                    let last_delta = var_count as u32 - *i;
+                    out += &forward.to_string().repeat(delta);
+                    out += "[";
+                    out += "-";
+                    out += &backward.to_string().repeat(delta);
+                    out += "+";
+                    out += &">".repeat(last_delta as usize);
+                    out += "+";
+                    out += &"<".repeat(last_delta as usize);
+                    out += &forward.to_string().repeat(delta);
+                    out += "]";
+                    out += &backward.to_string().repeat(delta);
+                    out += &">".repeat(last_delta as usize);
+                    out += "[";
+                    out += "-";
+                    out += &"<".repeat(last_delta as usize);
+                    out += &forward.to_string().repeat(delta);
+                    out += "+";
+                    out += &backward.to_string().repeat(delta);
+                    out += &">".repeat(last_delta as usize);
+                    out += "]";
+                    out += &"<".repeat(last_delta as usize);
+                },
+
                 _ => todo!(),
             }
             out += &"<".repeat(*i as usize);
@@ -211,7 +243,7 @@ fn compile_expr(expr: &Expr, var_count: usize) -> String {
     out
 }
 
-fn compile_prgram(tokens: &mut Vec<Token>, var_count: usize) -> String {
+fn compile_program(tokens: &mut Vec<Token>, var_count: usize) -> String {
     let mut out = String::new();
     let mut statements = Vec::new();
     while let (true, s) = parse_statement(tokens) {
@@ -235,5 +267,5 @@ fn main() {
         println!("{token:#?}");
     }
 
-    println!("{}", compile_prgram(&mut tokens, var_count));
+    println!("{}", compile_program(&mut tokens, var_count));
 }

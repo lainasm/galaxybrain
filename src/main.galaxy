@@ -1,2 +1,4 @@
 x = 65;
-put x;
+y = x;
+z = y;
+put y;
