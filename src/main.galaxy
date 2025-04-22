@@ -1,8 +1,10 @@
 x = 3;
 z = 51;
 
+k = 3;
+
 while x {
-    y = 3;
+    y = k;
     while y {
         put z;
         dec y;

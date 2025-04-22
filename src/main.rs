@@ -336,6 +336,30 @@ fn compile_program(tokens: &mut Vec<Token>, var_count: usize) -> String {
     out
 }
 
+fn even_pair(program: &str, pair: (char, char)) -> String {
+    let mut result_chars: Vec<char> = Vec::with_capacity(program.len()); // Pre-allocate capacity
+    for c in program.chars() {
+        if let Some(&last_char) = result_chars.last() {
+            if (c == pair.0 && last_char == pair.1) || (c == pair.1 && last_char == pair.0) {
+                result_chars.pop();
+            } else {
+                result_chars.push(c);
+            }
+        } else {
+            result_chars.push(c);
+        }
+    }
+
+    result_chars.into_iter().collect()
+}
+
+fn optimize(program: &str) -> String {
+    let mut optimized = program.to_string();
+    optimized = even_pair(&optimized, ('>', '<'));
+    optimized = even_pair(&optimized, ('+', '-'));
+    optimized
+}
+
 fn main() {
     let input = std::fs::read_to_string("main.galaxy").unwrap();
     println!("{input}");
@@ -346,5 +370,7 @@ fn main() {
         println!("{token:#?}");
     }
 
-    println!("{}", compile_program(&mut tokens, var_count));
+    let program = compile_program(&mut tokens, var_count);
+    println!("{program}");
+    println!("{}", &optimize(&program));
 }
