@@ -11,6 +11,8 @@ enum Token {
     LeftBraces,
     RightBraces,
     Dec,
+    AddAssign,
+    SubAssign,
     None,
 }
 
@@ -70,6 +72,10 @@ fn lex(input: &str) -> (Vec<Token>, usize) {
                 tokens.push(Token::Put);
             } else if sub_word == "while" {
                 tokens.push(Token::While);
+            } else if sub_word == "+=" {
+                tokens.push(Token::AddAssign);
+            } else if sub_word == "-=" {
+                tokens.push(Token::SubAssign);
             } else if sub_word == "dec" {
                 tokens.push(Token::Dec);
             } else if let (true, v) = match_integer(sub_word) {
@@ -123,6 +129,8 @@ enum Statement {
     Expr(Expr),
     While(u32, Box<Vec<Statement>>),
     Dec(u32),
+    AddAssign(u32, Expr),
+    SubAssign(u32, Expr),
     Failed,
 }
 
@@ -154,6 +162,36 @@ fn parse_statement(tokens: &mut Vec<Token>) -> (bool, Statement) {
             return (true, Statement::Dec(id));
         } else {
             println!("expected semicolon");
+            return (false, Statement::Failed);
+        }
+    } else if let (true, toks) = swallow_tokens(tokens, &[Token::Identifier(0), Token::AddAssign]) {
+        if let (true, e) = parse_expr(tokens) {
+            if let (true, _) = swallow_tokens(tokens, &[Token::Semicolon]) {
+                let id = match toks[0] {
+                    Token::Identifier(x) => x,
+                    _ => unreachable!(),
+                };
+
+                return (true, Statement::AddAssign(id, e));
+            }
+        }
+        else {
+            println!("invalid add assign");
+            return (false, Statement::Failed);
+        }
+    } else if let (true, toks) = swallow_tokens(tokens, &[Token::Identifier(0), Token::SubAssign]) {
+        if let (true, e) = parse_expr(tokens) {
+            if let (true, _) = swallow_tokens(tokens, &[Token::Semicolon]) {
+                let id = match toks[0] {
+                    Token::Identifier(x) => x,
+                    _ => unreachable!(),
+                };
+
+                return (true, Statement::SubAssign(id, e));
+            }
+        }
+        else {
+            println!("invalid sub assign");
             return (false, Statement::Failed);
         }
     } else if let (true, expr) = parse_expr(tokens) {
@@ -243,7 +281,30 @@ fn compile_statement(statement: &Statement, var_count: usize) -> String {
             out += &">".repeat(*i as usize);
             out += "-";
             out += &"<".repeat(*i as usize);
-        }
+        },
+
+        Statement::AddAssign(i, e) => {
+            match e {
+                Expr::Integer(x) => {
+                    out += &">".repeat(*i as usize);
+                    out += &"+".repeat(*x as usize);
+                    out += &"<".repeat(*i as usize);
+                },
+                _ => todo!(),
+            }
+        },
+
+        Statement::SubAssign(i, e) => {
+            match e {
+                Expr::Integer(x) => {
+                    out += &">".repeat(*i as usize);
+                    out += &"-".repeat(*x as usize);
+                    out += &"<".repeat(*i as usize);
+                },
+                _ => todo!(),
+            }
+        },
+
         Statement::Failed => {},
     };
 
@@ -371,6 +432,6 @@ fn main() {
     }
 
     let program = compile_program(&mut tokens, var_count);
-    println!("{program}");
+    // println!("{program}");
     println!("{}", &optimize(&program));
 }

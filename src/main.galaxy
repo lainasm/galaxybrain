@@ -7,8 +7,19 @@ while x {
     y = k;
     while y {
         put z;
-        dec y;
+        y -= 1;
     }
-    dec z;
-    dec x;
+    z -= 1;
+    x -= 1;
+}
+
+z = 48;
+x = 5;
+while x {
+    z += 6;
+    put z;
+    z += 3;
+    put z;
+    z -= 9;
+    x -= 1;
 }
