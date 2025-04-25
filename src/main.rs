@@ -284,25 +284,93 @@ fn compile_statement(statement: &Statement, var_count: usize) -> String {
         },
 
         Statement::AddAssign(i, e) => {
+            out += &">".repeat(*i as usize);
+
             match e {
                 Expr::Integer(x) => {
-                    out += &">".repeat(*i as usize);
                     out += &"+".repeat(*x as usize);
-                    out += &"<".repeat(*i as usize);
+                },
+
+                Expr::Identifier(i2) => {
+                    let (forward, backward) = if *i2 > *i {
+                        ('>', '<')
+                    } else {
+                        ('<', '>')
+                    };
+
+                    let delta = (*i2 as i32 - *i as i32).abs() as usize;
+                    let last_delta = var_count as u32 - *i;
+                    out += &forward.to_string().repeat(delta);
+                    out += "[";
+                    out += "-";
+                    out += &backward.to_string().repeat(delta);
+                    out += "+";
+                    out += &">".repeat(last_delta as usize);
+                    out += "+";
+                    out += &"<".repeat(last_delta as usize);
+                    out += &forward.to_string().repeat(delta);
+                    out += "]";
+                    out += &backward.to_string().repeat(delta);
+                    out += &">".repeat(last_delta as usize);
+                    out += "[";
+                    out += "-";
+                    out += &"<".repeat(last_delta as usize);
+                    out += &forward.to_string().repeat(delta);
+                    out += "+";
+                    out += &backward.to_string().repeat(delta);
+                    out += &">".repeat(last_delta as usize);
+                    out += "]";
+                    out += &"<".repeat(last_delta as usize);
                 },
                 _ => todo!(),
             }
+
+            out += &"<".repeat(*i as usize);
         },
 
         Statement::SubAssign(i, e) => {
+            out += &">".repeat(*i as usize);
+
             match e {
                 Expr::Integer(x) => {
-                    out += &">".repeat(*i as usize);
                     out += &"-".repeat(*x as usize);
-                    out += &"<".repeat(*i as usize);
+                },
+
+                Expr::Identifier(i2) => {
+                    let (forward, backward) = if *i2 > *i {
+                        ('>', '<')
+                    } else {
+                        ('<', '>')
+                    };
+
+                    let delta = (*i2 as i32 - *i as i32).abs() as usize;
+                    let last_delta = var_count as u32 - *i;
+                    out += &forward.to_string().repeat(delta);
+                    out += "[";
+                    out += "-";
+                    out += &backward.to_string().repeat(delta);
+                    out += "-";
+                    out += &">".repeat(last_delta as usize);
+                    out += "+";
+                    out += &"<".repeat(last_delta as usize);
+                    out += &forward.to_string().repeat(delta);
+                    out += "]";
+                    out += &backward.to_string().repeat(delta);
+                    out += &">".repeat(last_delta as usize);
+                    out += "[";
+                    out += "-";
+                    out += &"<".repeat(last_delta as usize);
+                    out += &forward.to_string().repeat(delta);
+                    out += "+";
+                    out += &backward.to_string().repeat(delta);
+                    out += &">".repeat(last_delta as usize);
+                    out += "]";
+                    out += &"<".repeat(last_delta as usize);
                 },
                 _ => todo!(),
             }
+
+            out += &"<".repeat(*i as usize);
         },
 
         Statement::Failed => {},
