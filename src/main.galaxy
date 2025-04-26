@@ -24,13 +24,21 @@ while x {
     x -= 1;
 }
 
-a = 6;
-b = 0;
-c = 8;
+a = 1;
+b = 1;
+c = 0;
+i = 8;
 
-while a {
-    b += c;
-    a -= 1;
+while i {
+    c = 0;
+    c += a;
+    c += b;
+    a = b;
+    b = c;
+    i -= 1;
 }
 
-put b;
+x = 0;
+if x {
+    put 48;
+}

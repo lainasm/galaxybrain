@@ -1,4 +1,4 @@
-use std::{collections::HashMap, os::linux::raw::stat};
+use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Token {
@@ -8,6 +8,7 @@ enum Token {
     Assign,
     Semicolon,
     While,
+    If,
     LeftBraces,
     RightBraces,
     Dec,
@@ -70,6 +71,8 @@ fn lex(input: &str) -> (Vec<Token>, usize) {
             }
             if match_put(sub_word) {
                 tokens.push(Token::Put);
+            } else if sub_word == "if" {
+                tokens.push(Token::If);
             } else if sub_word == "while" {
                 tokens.push(Token::While);
             } else if sub_word == "+=" {
@@ -119,7 +122,13 @@ fn swallow_tokens(tokens: &mut Vec<Token>, token: &[Token]) -> (bool, Vec<Token>
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-enum Block {
+enum WhileBlock {
+    Statements(u32, Vec<Statement>),
+    Failed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum IfBlock {
     Statements(u32, Vec<Statement>),
     Failed,
 }
@@ -128,6 +137,7 @@ enum Block {
 enum Statement {
     Expr(Expr),
     While(u32, Box<Vec<Statement>>),
+    If(u32, Box<Vec<Statement>>),
     Dec(u32),
     AddAssign(u32, Expr),
     SubAssign(u32, Expr),
@@ -144,15 +154,21 @@ enum Expr {
 }
 
 fn parse_statement(tokens: &mut Vec<Token>) -> (bool, Statement) {
-    if let (true, b) = parse_block(tokens) {
+    if let (true, b) = parse_while_block(tokens) {
         match b {
-            Block::Statements(id, s) => {
+            WhileBlock::Statements(id, s) => {
                 return (true, Statement::While(id, Box::new(s)));
             }
-            Block::Failed => {},
+            WhileBlock::Failed => {},
         }
-    }
-    else if let (true, toks) = swallow_tokens(tokens, &[Token::Dec, Token::Identifier(0)]) {
+    } else if let (true, b) = parse_if_block(tokens) {
+        match b {
+            IfBlock::Statements(id, s) => {
+                return (true, Statement::If(id, Box::new(s)));
+            }
+            IfBlock::Failed => {},
+        }
+    } else if let (true, toks) = swallow_tokens(tokens, &[Token::Dec, Token::Identifier(0)]) {
         if let (true, _) = swallow_tokens(tokens, &[Token::Semicolon]) {
             let id = match toks[1] {
                 Token::Identifier(x) => x,
@@ -207,7 +223,7 @@ fn parse_statement(tokens: &mut Vec<Token>) -> (bool, Statement) {
     (false, Statement::Failed)
 }
 
-fn parse_block(tokens: &mut Vec<Token>) -> (bool, Block) {
+fn parse_while_block(tokens: &mut Vec<Token>) -> (bool, WhileBlock) {
     if let (true, toks) = swallow_tokens(tokens, &[Token::While, Token::Identifier(0)]) {
         if let (true, _toks2) = swallow_tokens(tokens, &[Token::LeftBraces]) {
             let id = match toks[1] {
@@ -222,11 +238,33 @@ fn parse_block(tokens: &mut Vec<Token>) -> (bool, Block) {
                 statements.push(s);
             }
 
-            return (true, Block::Statements(id, statements));
+            return (true, WhileBlock::Statements(id, statements));
         }
     }
 
-    (false, Block::Failed)
+    (false, WhileBlock::Failed)
+}
+
+fn parse_if_block(tokens: &mut Vec<Token>) -> (bool, IfBlock) {
+    if let (true, toks) = swallow_tokens(tokens, &[Token::If, Token::Identifier(0)]) {
+        if let (true, _toks2) = swallow_tokens(tokens, &[Token::LeftBraces]) {
+            let id = match toks[1] {
+                Token::Identifier(x) => x,
+                _ => unreachable!(),
+            };
+
+            let mut statements = Vec::<Statement>::new();
+
+            while let (false, _) = swallow_tokens(tokens, &[Token::RightBraces]) {
+                let (p, s) = parse_statement(tokens);
+                statements.push(s);
+            }
+
+            return (true, IfBlock::Statements(id, statements));
+        }
+    }
+
+    (false, IfBlock::Failed)
 }
 
 fn parse_expr(tokens: &mut Vec<Token>) -> (bool, Expr) {
@@ -277,6 +315,42 @@ fn compile_statement(statement: &Statement, var_count: usize) -> String {
             out += "]";
             out += &"<".repeat(*i as usize);
         },
+        Statement::If(i, b) => {
+            let delta = var_count as u32 - *i;
+            out += &">".repeat(*i as usize);
+            out += "[";
+            out += "-";
+            out += &">".repeat(delta as usize);
+            out += "+";
+            out += ">";
+            out += "+";
+            out += "<";
+            out += &"<".repeat(delta as usize);
+            out += "]";
+            out += &">".repeat(delta as usize);
+            out += ">";
+            out += "[";
+            out += "-";
+            out += "<";
+            out += &"<".repeat(delta as usize);
+            out += "+";
+            out += &">".repeat(delta as usize);
+            out += ">";
+            out += "]";
+            out += "<";
+            out += "[";
+            out += &"<".repeat(delta as usize);
+            out += &"<".repeat(*i as usize);
+            for s in *b.clone() {
+                out += &compile_statement(&s, var_count + 1);
+            }
+            out += &">".repeat(var_count as usize);
+            out += "[";
+            out += "-";
+            out += "]";
+            out += "]";
+            out += &"<".repeat(var_count as usize);
+        }
         Statement::Dec(i) => {
             out += &">".repeat(*i as usize);
             out += "-";
