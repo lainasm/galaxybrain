@@ -42,3 +42,16 @@ x = 0;
 if x {
     put 48;
 }
+
+mul() {
+    result = 0;
+    while input1 {
+        result += input2;
+        input1 -= 1;
+    }
+}
+
+input1 = 6;
+input2 = 9;
+mul();
+put result;

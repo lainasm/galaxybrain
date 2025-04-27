@@ -14,6 +14,7 @@ enum Token {
     Dec,
     AddAssign,
     SubAssign,
+    Function(u32),
     None,
 }
 
@@ -48,10 +49,36 @@ fn match_identifier(word: &str, id_map: &mut HashMap<String, u32>) -> (bool, u32
     (true, id_map[word])
 }
 
+fn match_function(word: &str, function_map: &mut HashMap<String, u32>) -> (bool, u32) {
+    let mut function = String::new();
+    let mut has_parenthesis = false;
+    for c in word.chars() {
+        match c {
+            '0'..='9' => function.push(c),
+            'a'..='z' => function.push(c),
+            'A'..='Z' => function.push(c),
+            '(' => {has_parenthesis = true; break;},
+            _ => return (false, 0),
+        }
+    }
+
+    if !has_parenthesis {
+        return (false, 0);
+    }
+
+    if !function_map.contains_key(&function) {
+        function_map.insert(function.clone(), function_map.len() as u32);
+    }
+
+    (true, function_map[&function])
+}
+
 fn lex(input: &str) -> (Vec<Token>, usize) {
     let mut tokens = Vec::new();
 
     let mut id_map = HashMap::<String, u32>::new();
+    let mut function_map = HashMap::<String, u32>::new();
+
 
     for word in input.split(&[' ', '\n']) {
         if word.is_empty() {
@@ -83,6 +110,8 @@ fn lex(input: &str) -> (Vec<Token>, usize) {
                 tokens.push(Token::Dec);
             } else if let (true, v) = match_integer(sub_word) {
                 tokens.push(Token::Integer(v));
+            } else if let (true, v) = match_function(sub_word, &mut function_map) {
+                tokens.push(Token::Function(v));
             } else if let (true, v) = match_identifier(sub_word, &mut id_map) {
                 tokens.push(Token::Identifier(v));
             } else if sub_word == "=" {
@@ -134,10 +163,18 @@ enum IfBlock {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+enum FunctionBlock {
+    Statements(u32, Vec<Statement>),
+    Failed,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum Statement {
     Expr(Expr),
     While(u32, Box<Vec<Statement>>),
     If(u32, Box<Vec<Statement>>),
+    FunctionDef(u32, Box<Vec<Statement>>),
+    FunctionCall(u32),
     Dec(u32),
     AddAssign(u32, Expr),
     SubAssign(u32, Expr),
@@ -167,6 +204,24 @@ fn parse_statement(tokens: &mut Vec<Token>) -> (bool, Statement) {
                 return (true, Statement::If(id, Box::new(s)));
             }
             IfBlock::Failed => {},
+        }
+    } else if let (true, b) = parse_function_block(tokens) {
+        match b {
+            FunctionBlock::Statements(id, s) => {
+                return (true, Statement::FunctionDef(id, Box::new(s)));
+            },
+            FunctionBlock::Failed => {},
+        }
+    } else if let (true, toks) = swallow_tokens(tokens, &[Token::Function(0)]) {
+        if let (true, _) = swallow_tokens(tokens, &[Token::Semicolon]) {
+            let id = match toks[0] {
+                Token::Function(x) => x,
+                _ => unreachable!(),
+            };
+
+            return (true, Statement::FunctionCall(id));
+        } else {
+            println!("expected semicolon");
         }
     } else if let (true, toks) = swallow_tokens(tokens, &[Token::Dec, Token::Identifier(0)]) {
         if let (true, _) = swallow_tokens(tokens, &[Token::Semicolon]) {
@@ -267,6 +322,26 @@ fn parse_if_block(tokens: &mut Vec<Token>) -> (bool, IfBlock) {
     (false, IfBlock::Failed)
 }
 
+fn parse_function_block(tokens: &mut Vec<Token>) -> (bool, FunctionBlock) {
+    if let (true, toks) = swallow_tokens(tokens, &[Token::Function(0), Token::LeftBraces]) {
+        let id = match toks[0] {
+            Token::Function(x) => x,
+            _ => unreachable!(),
+        };
+
+        let mut statements = Vec::<Statement>::new();
+
+        while let (false, _) = swallow_tokens(tokens, &[Token::RightBraces]) {
+            let (p, s) = parse_statement(tokens);
+            statements.push(s);
+        }
+
+        return (true, FunctionBlock::Statements(id, statements));
+    }
+
+    (false, FunctionBlock::Failed)
+}
+
 fn parse_expr(tokens: &mut Vec<Token>) -> (bool, Expr) {
     if let (true, toks) = swallow_tokens(tokens, &[Token::Identifier(0), Token::Assign]) {
         if let (true, expr) = parse_expr(tokens) {
@@ -297,10 +372,18 @@ fn parse_expr(tokens: &mut Vec<Token>) -> (bool, Expr) {
     (false, Expr::Failed)
 }
 
-fn compile_statement(statement: &Statement, var_count: usize) -> String {
+fn compile_statement(statement: &Statement, var_count: usize, function_definitions: &HashMap<u32, Vec<Statement>>) -> String {
     let mut out = String::new();
 
     match statement {
+        Statement::FunctionDef(i, s) => {
+
+        },
+        Statement::FunctionCall(i) => {
+            for s in &function_definitions[i] {
+                out += &compile_statement(s, var_count, function_definitions);
+            }
+        },
         Statement::Expr(e) => {
             out += &compile_expr(e, var_count);
         },
@@ -309,7 +392,7 @@ fn compile_statement(statement: &Statement, var_count: usize) -> String {
             out += "[";
             out += &"<".repeat(*i as usize);
             for s in *b.clone() {
-                out += &compile_statement(&s, var_count);
+                out += &compile_statement(&s, var_count, function_definitions);
             }
             out += &">".repeat(*i as usize);
             out += "]";
@@ -342,7 +425,7 @@ fn compile_statement(statement: &Statement, var_count: usize) -> String {
             out += &"<".repeat(delta as usize);
             out += &"<".repeat(*i as usize);
             for s in *b.clone() {
-                out += &compile_statement(&s, var_count + 1);
+                out += &compile_statement(&s, var_count + 1, function_definitions);
             }
             out += &">".repeat(var_count as usize);
             out += "[";
@@ -524,16 +607,19 @@ fn compile_expr(expr: &Expr, var_count: usize) -> String {
     out
 }
 
-fn compile_program(tokens: &mut Vec<Token>, var_count: usize) -> String {
+fn compile_program(tokens: &mut Vec<Token>, var_count: usize, function_definitions: &mut HashMap<u32, Vec<Statement>>) -> String {
     let mut out = String::new();
     let mut statements = Vec::new();
     while let (true, s) = parse_statement(tokens) {
         println!("{s:#?}");
+        if let Statement::FunctionDef(i, b) = s.clone() {
+            function_definitions.insert(i, *b.clone());
+        }
         statements.push(s);
     }
 
     for statement in statements {
-        out += &compile_statement(&statement, var_count);
+        out += &compile_statement(&statement, var_count, function_definitions);
     }
 
     out
@@ -568,12 +654,13 @@ fn main() {
     println!("{input}");
 
     let (mut tokens, var_count) = lex(&input).clone();
+    let mut function_definitions = HashMap::<u32, Vec<Statement>>::new();
 
     for token in &tokens {
         println!("{token:#?}");
     }
 
-    let program = compile_program(&mut tokens, var_count);
+    let program = compile_program(&mut tokens, var_count, &mut function_definitions);
     // println!("{program}");
     println!("{}", &optimize(&program));
 }
