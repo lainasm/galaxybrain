@@ -43,15 +43,35 @@ if x {
     put 48;
 }
 
-mul() {
-    result = 0;
-    while input1 {
-        result += input2;
-        input1 -= 1;
-    }
-}
 
 input1 = 6;
 input2 = 9;
 mul();
 put result;
+
+mul() {
+    result = 0;
+    tmp = input1;
+    while tmp {
+        result += input2;
+        tmp -= 1;
+    }
+}
+
+
+input1 = 9;
+input2 = 9;
+mul();
+
+
+cool = 0;
+elseflag = 1;
+
+if cool {
+    put 49;
+    elseflag = 0;
+}
+
+if elseflag {
+    put 48;
+}

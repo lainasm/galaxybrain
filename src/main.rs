@@ -15,6 +15,7 @@ enum Token {
     AddAssign,
     SubAssign,
     Function(u32),
+    DeclArray(u32),
     None,
 }
 
@@ -33,7 +34,7 @@ fn match_integer(word: &str) -> (bool, u8) {
     (true, word.parse().unwrap())
 }
 
-fn match_identifier(word: &str, id_map: &mut HashMap<String, u32>) -> (bool, u32) {
+fn match_identifier(word: &str, id_map: &mut HashMap<String, u32>, next_id: &mut u32) -> (bool, u32) {
     for c in word.chars() {
         match c {
             '0'..='9' => {},
@@ -43,7 +44,8 @@ fn match_identifier(word: &str, id_map: &mut HashMap<String, u32>) -> (bool, u32
         }
     }
     if !id_map.contains_key(word) {
-        id_map.insert(word.to_string(), id_map.len() as u32);
+        id_map.insert(word.to_string(), *next_id);
+        *next_id += 1;
     }
 
     (true, id_map[word])
@@ -73,12 +75,42 @@ fn match_function(word: &str, function_map: &mut HashMap<String, u32>) -> (bool,
     (true, function_map[&function])
 }
 
+fn match_array(word: &str, identifier_map: &mut HashMap<String, u32>, next_id: &mut u32) -> (bool, u32) {
+    let mut array = String::new();
+    let mut has_brackets = false;
+    for c in word.chars() {
+        match c {
+            '0'..='9' => array.push(c),
+            'a'..='z' => array.push(c),
+            'A'..='Z' => array.push(c),
+            '[' => {has_brackets = true; break;},
+            _ => return (false, 0),
+        }
+    }
+
+    if !has_brackets {
+        return (false, 0);
+    }
+
+    let beg = word.find('[').unwrap() + 1;
+    let end = word.find(']').unwrap();
+    let arr_len: u32 = word[beg..end].parse().unwrap();
+    println!("creating array of length {arr_len}");
+
+    if !identifier_map.contains_key(&array) {
+        identifier_map.insert(array.clone(), *next_id);
+        *next_id += arr_len + 2;
+    }
+
+    (true, identifier_map[&array])
+}
+
 fn lex(input: &str) -> (Vec<Token>, usize) {
     let mut tokens = Vec::new();
 
     let mut id_map = HashMap::<String, u32>::new();
     let mut function_map = HashMap::<String, u32>::new();
-
+    let mut next_id = 0;
 
     for word in input.split(&[' ', '\n']) {
         if word.is_empty() {
@@ -98,6 +130,8 @@ fn lex(input: &str) -> (Vec<Token>, usize) {
             }
             if match_put(sub_word) {
                 tokens.push(Token::Put);
+            } else if let (true, v) = match_array(sub_word, &mut id_map, &mut next_id) {
+                tokens.push(Token::DeclArray(v));
             } else if sub_word == "if" {
                 tokens.push(Token::If);
             } else if sub_word == "while" {
@@ -112,7 +146,7 @@ fn lex(input: &str) -> (Vec<Token>, usize) {
                 tokens.push(Token::Integer(v));
             } else if let (true, v) = match_function(sub_word, &mut function_map) {
                 tokens.push(Token::Function(v));
-            } else if let (true, v) = match_identifier(sub_word, &mut id_map) {
+            } else if let (true, v) = match_identifier(sub_word, &mut id_map, &mut next_id) {
                 tokens.push(Token::Identifier(v));
             } else if sub_word == "=" {
                 tokens.push(Token::Assign);
@@ -126,7 +160,7 @@ fn lex(input: &str) -> (Vec<Token>, usize) {
         }
     }
 
-    (tokens, id_map.len())
+    (tokens, next_id as usize)
 }
 
 fn swallow_tokens(tokens: &mut Vec<Token>, token: &[Token]) -> (bool, Vec<Token>) {
@@ -178,6 +212,7 @@ enum Statement {
     Dec(u32),
     AddAssign(u32, Expr),
     SubAssign(u32, Expr),
+    ArrayDecl(u32),
     Failed,
 }
 
@@ -211,6 +246,17 @@ fn parse_statement(tokens: &mut Vec<Token>) -> (bool, Statement) {
                 return (true, Statement::FunctionDef(id, Box::new(s)));
             },
             FunctionBlock::Failed => {},
+        }
+    } else if let (true, toks) = swallow_tokens(tokens, &[Token::DeclArray(0)]) {
+        if let (true, _) = swallow_tokens(tokens, &[Token::Semicolon]) {
+            let id = match toks[0] {
+                Token::DeclArray(x) => x,
+                _ => unreachable!(),
+            };
+
+            return (true, Statement::ArrayDecl(id));
+        } else {
+            println!("expected semicolon");
         }
     } else if let (true, toks) = swallow_tokens(tokens, &[Token::Function(0)]) {
         if let (true, _) = swallow_tokens(tokens, &[Token::Semicolon]) {
@@ -376,6 +422,10 @@ fn compile_statement(statement: &Statement, var_count: usize, function_definitio
     let mut out = String::new();
 
     match statement {
+        Statement::ArrayDecl(i) => {
+
+        },
+
         Statement::FunctionDef(i, s) => {
 
         },
